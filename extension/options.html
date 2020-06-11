@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+  <html>
+    <head>
+      <style>
+        #id, #last_message { 
+          font-size: 80%;
+        }
+        body {
+          width: 500px;
+        }
+        input {
+          width: 90%;
+        }
+      </style>
+      <script src="options.js"></script>
+    </head>
+    <body>
+      <h2>Battery Monitor</h2>
+      <p id="status"></p>
+      <h2>Machine Name</h2>
+      <input type="text" id="hostname">
+
+      <h2>Server URL</h2>
+      <input type="url" id="server_url">
+
+      <h2>Alert Threshold</h2>
+      <input type="number" min="0" max="100" id="alertThreshold">
+      
+    </body>
+  </html>
