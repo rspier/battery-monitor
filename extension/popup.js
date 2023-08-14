@@ -16,24 +16,23 @@ Copyright 2020 Google LLC
 
 var keys = ["hostname", "server_url"];
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     console.log("popup");
-    
-    let b = document.getElementById("sendnow");
-b.addEventListener("click", function(_event) {
-    chrome.runtime.sendMessage({action: "send"});
-    console.log("click sent")
-})
 
-    chrome.storage.local.get(keys, function(result) {
+    let b = document.getElementById("sendnow");
+    b.addEventListener("click", function (_event) {
+        chrome.runtime.sendMessage({ target: "background", type: "send" });
+        console.log("click sent")
+    })
+
+    chrome.storage.local.get(keys, function (result) {
         for (var key in result) {
             console.log(key)
             let c = result[key];
             let e = document.getElementById(key);
             if (e) {
-            e.textContent = c; // for P
-           }
-        }   
+                e.textContent = c; // for P
+            }
+        }
     });
 });
-

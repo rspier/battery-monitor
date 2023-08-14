@@ -20,7 +20,7 @@ limitations under the License.
 
 import (
 	"flag"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -38,19 +38,13 @@ var (
 	pushGateway = flag.String("pushgateway", "localhost:9091", "pushgateway address")
 )
 
-/*        hostname: localStorage.getItem("hostname"),
-charging: battery.charging,
-chargingTime: battery.chargingTime,
-dischargingTime: battery.dischargingTime,
-level: battery.level * 100,
-*/
-// https://stackoverflow.com/questions/48050945/how-to-unmarshal-json-into-durations
 type batteryStatus struct {
 	Hostname        string `json:"hostname"`
 	Charging        bool   `json:"charging"`
 	ChargingTime    int64  `json:"chargingTime"`
 	DischargingTime int64  `json:"dischargingTime"`
 	Level           int8   `json:"level"`
+	TabCount        int    `json:"tabCount"`
 }
 
 // We could clean up old vec entries, but it's hard to analyze the "last seen"
@@ -85,6 +79,13 @@ var (
 		},
 		[]string{"instance"},
 	)
+	tabCount = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "tabCount",
+			Help: "tab count",
+		},
+		[]string{"instance"},
+	)
 	lastUpdate = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "last_updated",
@@ -107,7 +108,7 @@ func postHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	defer r.Body.Close()
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -119,8 +120,7 @@ func postHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	log.Printf("%+v", s)
+	log.Printf("%v: %d%% +%d/-%d t:%d", s.Hostname, s.Level, s.ChargingTime, s.DischargingTime, s.TabCount)
 
 	var g prometheus.Gauge
 	g, _ = chargeLevel.GetMetricWithLabelValues(s.Hostname)
@@ -138,6 +138,9 @@ func postHandler(w http.ResponseWriter, r *http.Request) {
 		g.Set(0.0)
 
 	}
+
+	g, _ = tabCount.GetMetricWithLabelValues(s.Hostname)
+	g.Set(float64(s.TabCount))
 
 	g, _ = lastUpdate.GetMetricWithLabelValues(s.Hostname)
 	now := time.Now().Unix()

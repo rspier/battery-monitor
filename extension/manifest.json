@@ -1,24 +1,26 @@
 {
-    "name": "Battery Monitor",
-    "version": "0.01.0.0005",
-    "description": "Report laptop battery status to a server which can push to Prometheus for graphing and alerting!",
-    "background": {
-        "scripts": [
-            "background.js"
-        ],
-        "persistent": false
-    },
-    "content_security_policy": "script-src 'self'; object-src 'self'",
-    "browser_action": {
-        "default_title": "Battery Monitor",
-        "default_popup": "popup.html"
-    },
-    "permissions": [
-        "storage", "alarms", "notifications"
-     ],
-    "manifest_version": 2,
-    "icons": {
-        "128": "icon128.png"
-    },
-    "options_page": "options.html"
+  "name": "Battery and Tab Stat Exporter",
+  "version": "0.03.0.0001",
+  "description": "Report laptop battery and tab count metrics to a server which can push to Prometheus for graphing and alerting!",
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications",
+    "offscreen"
+  ],
+  "manifest_version": 3,
+  "icons": {
+    "128": "icon128.png"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Battery Monitor",
+    "default_popup": "popup.html"
+  }
 }
