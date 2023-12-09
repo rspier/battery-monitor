@@ -59,6 +59,13 @@ async function realPostState() {
   // always update hostname
   state.hostname = config.hostname;
 
+  // try to hide the bug where sometimes tabCount gets reset to 0 (SW
+  // reinitialized?)
+  if (state.tabCount == 0) {
+    console.log("tabCount is unexpectedly 0.  attempting updateTabState.")
+    await updateTabState()
+  }
+
   if (_.isEqual(state, lastState)) {
     console.log('not sending, state is the same: ', state, ' == ', lastState);
     return null;
@@ -134,6 +141,15 @@ async function updateTabs() {
 
 async function updateTabState() {
   await chrome.tabs.query({}, function (tabs) {
+    /*
+    // Consider uncommenting this code if the hack in realPostState doesn't work.
+    if (tabs.length == 0) {
+      // There's probably always at least one tab. (What about the case where
+      // all windows are closed but browser is still running?)
+      console.log("No tabs found.  Uh oh.")
+      return;
+    }
+    */
     state.tabCount = tabs.length;
   })
 }
@@ -183,6 +199,7 @@ async function handleMessages(message) {
         target: 'popup',
         data: state
       });
+      break;
     default:
       console.warn(`Unexpected message type received: '${message.type}'.`);
   }
