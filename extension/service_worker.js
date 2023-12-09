@@ -66,18 +66,24 @@ async function realPostState() {
     await updateTabState()
   }
 
-  if (_.isEqual(state, lastState)) {
+  let now = Date.now() / 1000;
+  lastAgo = now - lastPostTime;
+
+  // don't post if it it hasn't changed, unless it's been 15 minutes.
+  if (_.isEqual(state, lastState) && lastAgo < (15*3600)) {
     console.log('not sending, state is the same: ', state, ' == ', lastState);
     return null;
   }
 
-  // _.debounce doesn't work well over 15 seconds, we want a minute.
-  let now = Date.now() / 1000;
-  if (now - lastPostTime < 60) { return null; }
-  lastPostTime = now;
+  // _.debounce doesn't work well over 15 seconds, we want to wait at least a minute between posts.
+  if (now - lastAgo < 60) { return null; }
+
 
   let posted = await postData(server_url, state)
+
+  lastPostTime = now;
   Object.assign(lastState, state)
+
   return posted
 }
 postState = _.debounce(realPostState, DEBOUNCE, { leading: true });
