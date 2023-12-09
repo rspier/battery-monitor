@@ -17,17 +17,19 @@ Copyright 2020 Google LLC
 var keys = ["hostname", "server_url"];
 
 document.addEventListener('DOMContentLoaded', function () {
-    console.log("popup");
+    chrome.runtime.sendMessage({
+        type: 'getState',
+        target: 'background',
+        data: ""
+    });
 
     let b = document.getElementById("sendnow");
     b.addEventListener("click", function (_event) {
         chrome.runtime.sendMessage({ target: "background", type: "send" });
-        console.log("click sent")
     })
 
     chrome.storage.local.get(keys, function (result) {
         for (var key in result) {
-            console.log(key)
             let c = result[key];
             let e = document.getElementById(key);
             if (e) {
@@ -36,3 +38,26 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 });
+
+chrome.runtime.onMessage.addListener(handleMessages);
+
+// This function performs basic filtering and error checking on messages before
+// dispatching the message to a more specific message handler.
+async function handleMessages(message) {
+    // Return early if this message isn't meant for the background script
+    if (message.target !== 'popup') {
+        return;
+    }
+    // Dispatch the message to an appropriate handler.
+    switch (message.type) {
+        case 'state':
+            document.getElementById("json").innerHTML = JSON.stringify(message.data);
+            break;
+        default:
+            console.warn(`Unexpected message type received: '${message.type}'.`);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function (e) {
+
+})

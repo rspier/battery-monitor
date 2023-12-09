@@ -1,24 +1,36 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <style>
-    #id, #last_message { 
+    #id,
+    #last_message {
       font-size: 80%;
     }
+
     body {
       width: 500px;
     }
+
     input {
       width: 90%;
+    }
+
+    #json {
+      font-family: monospace;
+      overflow-wrap: break-word;
     }
   </style>
   <script src="popup.js"></script>
 </head>
+
 <body>
-  <p>Machine Name: <span id="hostname"></span></p>
-  
-  <p>Server URL: <span id="server_url"></span></p>
+  <p><b>Machine Name:</b> <span id="hostname"></span></p>
+  <p><b>Server URL:</b> <span id="server_url"></span></p>
 
   <button id="sendnow">Send Now</button>
+
+  <p id="json"></p>
 </body>
+
 </html>

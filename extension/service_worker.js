@@ -177,6 +177,12 @@ async function handleMessages(message) {
     case 'send':
       postState();
       break;
+    case 'getState':
+      chrome.runtime.sendMessage({
+        type: 'state',
+        target: 'popup',
+        data: state
+      });
     default:
       console.warn(`Unexpected message type received: '${message.type}'.`);
   }
