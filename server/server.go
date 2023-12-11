@@ -45,6 +45,7 @@ type batteryStatus struct {
 	DischargingTime int64  `json:"dischargingTime"`
 	Level           int8   `json:"level"`
 	TabCount        int    `json:"tabCount"`
+	InitializedAt   int    `json:"initializedAt"`
 }
 
 // We could clean up old vec entries, but it's hard to analyze the "last seen"
@@ -120,7 +121,8 @@ func postHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("%v: %d%% +%d/-%d t:%d", s.Hostname, s.Level, s.ChargingTime, s.DischargingTime, s.TabCount)
+	log.Printf("%v: %d%% +%d/-%d t:%d %d",
+		s.Hostname, s.Level, s.ChargingTime, s.DischargingTime, s.TabCount, s.InitializedAt)
 
 	var g prometheus.Gauge
 	g, _ = chargeLevel.GetMetricWithLabelValues(s.Hostname)

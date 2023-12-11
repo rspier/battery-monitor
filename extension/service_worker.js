@@ -31,6 +31,7 @@ let state = {
   dischargingTime: 0,
   level: 0,
   tabCount: 0,
+  initializedAt: Math.floor(Date.now() / 1000),
 }
 let lastState = {};
 
@@ -69,15 +70,14 @@ async function realPostState() {
   let now = Date.now() / 1000;
   lastAgo = now - lastPostTime;
 
-  // don't post if it it hasn't changed, unless it's been 15 minutes.
-  if (_.isEqual(state, lastState) && lastAgo < (15*3600)) {
+  // don't post if it it hasn't changed, unless it's been 5 minutes.
+  if (_.isEqual(state, lastState) && lastAgo < (5*60)) {
     console.log('not sending, state is the same: ', state, ' == ', lastState);
     return null;
   }
 
   // _.debounce doesn't work well over 15 seconds, we want to wait at least a minute between posts.
-  if (now - lastAgo < 60) { return null; }
-
+  if (lastAgo < 60) { return null; }
 
   let posted = await postData(server_url, state)
 
@@ -208,5 +208,23 @@ async function handleMessages(message) {
       break;
     default:
       console.warn(`Unexpected message type received: '${message.type}'.`);
+  }
+}
+
+async function updateBattery() {
+  chrome.runtime.sendMessage({ target: "offscreen", type: "updateBatteryState" });
+}
+
+// Every 5 minutes, update statistics even if they haven't changed otherwise.
+chrome.alarms.create("5min", { periodInMinutes: 5 });
+
+async function handleAlarm(alarm) {
+  switch (alarm.name){
+    case '5min':
+      updateTabs();
+      updateBattery();
+    break;
+    default:
+      console.warn(`Unexpected alarm received: ${alarm.name}`);
   }
 }
