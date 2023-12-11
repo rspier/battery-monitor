@@ -14,25 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-const DEBOUNCE = 15000; // don't update server more than once a minute
-
 // set defaults that will be overwridden by real values
 var config = { previousLevel: -1, alertThreshold: -1 };
 
+let MAX_POST_FREQUENCY = 60; // wait at least 60 seconds between any server updates
+let MIN_POST_FREQUENCY = 5 * 60; // post every 5 minutes even if nothing changes
+
 // The full lodash is needed because the core subset doesn't have debounce.
 // Consider using a proper tree-shaking build to get a custom tiny lodash.
+// TODO: we're not using debounce anymore go back to the smaller lodash
 importScripts('lodash.min.js');
 
 // global used to merge data between battery and tabs
-let state = {
-  hostname: "",
-  charging: false,
-  chargingTime: 0,
-  dischargingTime: 0,
-  level: 0,
-  tabCount: 0,
-  initializedAt: Math.floor(Date.now() / 1000),
-}
 let lastState = {};
 
 const offscreenCanvas = new OffscreenCanvas(32, 32);
@@ -50,35 +43,25 @@ function setIcon(value) {
 }
 
 let lastPostTime = 0;
-async function realPostState() {
+async function realPostState(state) {
+  // _.debounce doesn't work well over 15 seconds, we want to wait at least a minute between posts.
+  let now = Date.now() / 1000;
+  let lastAgo = now - lastPostTime;
+  if (lastAgo < MAX_POST_FREQUENCY) { console.log('not posting more than once a minute'); return null; }
+
   let server_url = config["server_url"];
   if (!server_url) {
     console.log("no server specified");
     return null;
   }
 
-  // always update hostname
-  state.hostname = config.hostname;
-
-  // try to hide the bug where sometimes tabCount gets reset to 0 (SW
-  // reinitialized?)
-  if (state.tabCount == 0) {
-    console.log("tabCount is unexpectedly 0.  attempting updateTabState.")
-    await updateTabState()
-  }
-
-  let now = Date.now() / 1000;
-  lastAgo = now - lastPostTime;
-
   // don't post if it it hasn't changed, unless it's been 5 minutes.
-  if (_.isEqual(state, lastState) && lastAgo < (5*60)) {
+  if (_.isEqual(state, lastState) && lastAgo < (MIN_POST_FREQUENCY - 1)) {
     console.log('not sending, state is the same: ', state, ' == ', lastState);
     return null;
   }
 
-  // _.debounce doesn't work well over 15 seconds, we want to wait at least a minute between posts.
-  if (lastAgo < 60) { return null; }
-
+  console.log('posting state: ', state)
   let posted = await postData(server_url, state)
 
   lastPostTime = now;
@@ -86,11 +69,12 @@ async function realPostState() {
 
   return posted
 }
-postState = _.debounce(realPostState, DEBOUNCE, { leading: true });
+let postState = realPostState
 
-// https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+// postData handles the network part of sending data to the server.
 async function postData(url = '', data = {}) {
   // Default options are marked with *
+  // https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
   const response = await fetch(url, {
     method: 'POST', // *GET, POST, PUT, DELETE, etc.
     mode: 'no-cors', // no-cors, *cors, same-origin
@@ -103,13 +87,11 @@ async function postData(url = '', data = {}) {
     referrerPolicy: 'no-referrer', // no-referrer, *no-referrer-when-downgrade, origin, origin-when-cross-origin, same-origin, strict-origin, strict-origin-when-cross-origin, unsafe-url
     body: JSON.stringify(data) // body data type must match "Content-Type" header
   });
-  return response; // parses JSON response into native JavaScript objects
+  return response;
 }
 
-var lastPost = 0;
-
-function updateBatteryStatus(battery) {
-  let level = battery.level * 100;
+async function batteryAlert(battery) {
+  let level = battery.level;
   if (level != config.previousLevel // could use lastState.level ?
     && level <= config.alertThreshold
     && battery.charging == false
@@ -125,42 +107,45 @@ function updateBatteryStatus(battery) {
     chrome.notifications.create(null, opt, null);
   }
   chrome.storage.local.set({ previousLevel: level });
-
-  state.charging = battery.charging
-  state.chargingTime = battery.chargingTime
-  state.dischargingTime = battery.dischargingTime
-  state.level = battery.level * 100
-  setIcon(state.level)
-
-  postState()
 }
+
 setIcon("?");
 // setup the config and then call setup
 chrome.storage.local.get(["hostname", "server_url", "alertThreshold", "previousLevel"], function (result) {
   config = result;
 });
 
-async function updateTabs() {
-  await updateTabState()
-  postState()
+// postUpdate posts battery and tab count information. 
+async function postUpdate(battery, tabCount) {
+  data = {
+    charging: battery.charging,
+    chargingTime: battery.chargingTime,
+    dischargingTime: battery.dischargingTime,
+    level: battery.level,
+    hostname: config.hostname,
+    tabCount: tabCount,
+  }
+  setIcon(data.level)
+  postState(data);
 }
 
-async function updateTabState() {
-  await chrome.tabs.query({}, function (tabs) {
-    /*
-    // Consider uncommenting this code if the hack in realPostState doesn't work.
-    if (tabs.length == 0) {
-      // There's probably always at least one tab. (What about the case where
-      // all windows are closed but browser is still running?)
-      console.log("No tabs found.  Uh oh.")
-      return;
-    }
-    */
-    state.tabCount = tabs.length;
+// batteryUpdate is called when the battery levels change.  Generally it's
+// triggered by handling a message from the offscreen page.
+async function batteryUpdate(battery) {
+  console.log('batteryUpdate');
+  chrome.tabs.query({}, function (tabs) {
+    postUpdate(battery, tabs.length);
   })
+  batteryAlert(battery);
 }
-chrome.tabs.onCreated.addListener(updateTabs);
-chrome.tabs.onRemoved.addListener(updateTabs);
+
+// tabsUpdate triggers when a tab is created or removed.  It triggers a battery update request which will update the stats.
+async function tabsUpdate(tabs) {
+  console.log('tabsUpdate');
+  chrome.runtime.sendMessage({ target: "offscreen", type: "updateBatteryState" });
+}
+chrome.tabs.onCreated.addListener(tabsUpdate);
+chrome.tabs.onRemoved.addListener(tabsUpdate);
 
 chrome.storage.onChanged.addListener(function (changes, _) {
   for (var key in changes) {
@@ -169,20 +154,23 @@ chrome.storage.onChanged.addListener(function (changes, _) {
   }
 });
 
-self.addEventListener("activate", async function (e) {
-  // setup initial tab count
-  await updateTabState();
+async function handleAlarm(alarm) {
+  console.log(`alarm: ${alarm.name}`);
+  switch (alarm.name) {
+    case 'periodic':
+      forceUpdate();
+      break;
+    default:
+      console.warn(`Unexpected alarm received: ${alarm.name}`);
+  }
+}
+chrome.alarms.onAlarm.addListener(handleAlarm);
 
-  await chrome.offscreen.createDocument({
-    url: chrome.runtime.getURL('offscreen.html'),
-    reasons: [chrome.offscreen.Reason.BATTERY_STATUS],
-    justification: 'Read battery levels.',
-  });
 
-  console.log("extension activated");
-});
-
-chrome.runtime.onMessage.addListener(handleMessages);
+async function forceUpdate() {
+  console.log('forceUpdate');
+  chrome.runtime.sendMessage({ target: "offscreen", type: "updateBatteryState" });
+}
 
 // This function performs basic filtering and error checking on messages before
 // dispatching the message to a more specific message handler.
@@ -194,37 +182,42 @@ async function handleMessages(message) {
   // Dispatch the message to an appropriate handler.
   switch (message.type) {
     case 'battery':
-      updateBatteryStatus(message.data);
+      batteryUpdate(message.data);
       break;
     case 'send':
-      postState();
+      forceUpdate();
       break;
     case 'getState':
       chrome.runtime.sendMessage({
         type: 'state',
         target: 'popup',
-        data: state
+        data: lastState,
       });
       break;
     default:
       console.warn(`Unexpected message type received: '${message.type}'.`);
   }
 }
+chrome.runtime.onMessage.addListener(handleMessages);
 
-async function updateBattery() {
-  chrome.runtime.sendMessage({ target: "offscreen", type: "updateBatteryState" });
-}
+self.addEventListener("activate", async function (e) {
+  // don't have to explicitly initialize tab count, because when the battery state returns it'll happen.
+  chrome.offscreen.createDocument({
+    url: chrome.runtime.getURL('offscreen.html'),
+    reasons: [chrome.offscreen.Reason.BATTERY_STATUS],
+    justification: 'Read battery levels.',
+  });
 
-// Every 5 minutes, update statistics even if they haven't changed otherwise.
-chrome.alarms.create("5min", { periodInMinutes: 5 });
+  console.log("extension activated");
+});
 
-async function handleAlarm(alarm) {
-  switch (alarm.name){
-    case '5min':
-      updateTabs();
-      updateBattery();
-    break;
-    default:
-      console.warn(`Unexpected alarm received: ${alarm.name}`);
-  }
-}
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  // reason will be 'install' or 'update'
+  console.log(`reason: ${reason}`);
+
+  await chrome.alarms.clearAll();
+  // Every 5 minutes, update statistics even if they haven't changed otherwise.
+  chrome.alarms.create("periodic", { periodInMinutes: MIN_POST_FREQUENCY / 60 });
+});
+
+// the end

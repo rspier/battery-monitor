@@ -15,7 +15,7 @@ function batteryChanged(battery) {
       charging: battery.charging,
       chargingTime: battery.chargingTime,
       dischargingTime: battery.dischargingTime,
-      level: battery.level,
+      level: battery.level * 100,
     }
   )
 }
