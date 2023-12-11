@@ -115,7 +115,7 @@ chrome.storage.local.get(["hostname", "server_url", "alertThreshold", "previousL
   config = result;
 });
 
-// postUpdate posts battery and tab count information. 
+// postUpdate posts battery and tab count information.
 async function postUpdate(battery, tabCount) {
   data = {
     charging: battery.charging,
@@ -200,13 +200,37 @@ async function handleMessages(message) {
 }
 chrome.runtime.onMessage.addListener(handleMessages);
 
+let creating; // A global promise to avoid concurrency issues
+async function setupOffscreenDocument(path) {
+  // Check all windows controlled by the service worker to see if one
+  // of them is the offscreen document with the given path
+  const offscreenUrl = chrome.runtime.getURL(path);
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [offscreenUrl]
+  });
+
+  if (existingContexts.length > 0) {
+    return;
+  }
+
+  // create offscreen document
+  if (creating) {
+    await creating;
+  } else {
+    creating = chrome.offscreen.createDocument({
+      url: path,
+      reasons: [chrome.offscreen.Reason.BATTERY_STATUS],
+      justification: 'Read battery levels.',
+    });
+    await creating;
+    creating = null;
+  }
+}
+
 self.addEventListener("activate", async function (e) {
   // don't have to explicitly initialize tab count, because when the battery state returns it'll happen.
-  chrome.offscreen.createDocument({
-    url: chrome.runtime.getURL('offscreen.html'),
-    reasons: [chrome.offscreen.Reason.BATTERY_STATUS],
-    justification: 'Read battery levels.',
-  });
+  setupOffscreenDocument('offscreen.html');
 
   console.log("extension activated");
 });
@@ -218,6 +242,10 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   await chrome.alarms.clearAll();
   // Every 5 minutes, update statistics even if they haven't changed otherwise.
   chrome.alarms.create("periodic", { periodInMinutes: MIN_POST_FREQUENCY / 60 });
+});
+
+chrome.runtime.onStartup.addListener(async function (e) {
+  setupOffscreenDocument('offscreen.html');
 });
 
 // the end

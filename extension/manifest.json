@@ -1,6 +1,6 @@
 {
   "name": "Battery and Tab Stat Exporter",
-  "version": "0.04.0.0001",
+  "version": "0.04.0.0002",
   "description": "Report laptop battery and tab count metrics to a server which can push to Prometheus for graphing and alerting!",
   "background": {
     "service_worker": "service_worker.js"
